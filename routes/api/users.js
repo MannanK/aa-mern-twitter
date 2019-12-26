@@ -1,5 +1,8 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const jwt = require('jsonwebtoken');
+const keys = require('../../config/keys');
+const User = require("../../models/User");
 const validateRegisterInput = require('../../validation/register');
 const validateLoginInput = require('../../validation/login');
 
@@ -14,17 +17,37 @@ router.post('/register', (req, res) => {
     return res.status(400).json(errors);
   }
 
+  // Check to make sure nobody has already registered with a duplicate email
   User.findOne({ email: req.body.email })
     .then(user => {
       if (user) {
-        // Use the validations to send the error
-        errors.email = 'Email already exists';
-        return res.status(400).json(errors);
+        // Throw a 400 error if the email address already exists
+        return res.status(400).json({ email: "A user has already registered with this address" });
       } else {
+        // Otherwise create a new user
         const newUser = new User({
-          name: req.body.name,
+          handle: req.body.handle,
           email: req.body.email,
           password: req.body.password
+        });
+
+        bcrypt.genSalt(10, (err, salt) => {
+          bcrypt.hash(newUser.password, salt, (err, hash) => {
+            if (err) throw err;
+            newUser.password = hash;
+            newUser.save()
+              .then(user => {
+                const payload = { id: user.id, handle: user.handle };
+
+                jwt.sign(payload, keys.secretOrKey, { expiresIn: 3600 }, (err, token) => {
+                  res.json({
+                    success: true,
+                    token: "Bearer " + token
+                  });
+                });
+              })
+              .catch(err => console.log(err));
+          });
         });
       }
     });
@@ -44,17 +67,29 @@ router.post('/login', (req, res) => {
     .then(user => {
       if (!user) {
         // Use the validations to send the error
-        errors.email = 'User not found';
+        errors.email = 'This user does not exist';
         return res.status(404).json(errors);
       }
 
       bcrypt.compare(password, user.password)
         .then(isMatch => {
           if (isMatch) {
-            res.json({ msg: 'Success' });
+            const payload = { id: user.id, handle: user.handle };
+
+            jwt.sign(
+              payload,
+              keys.secretOrKey,
+              // Tell the key to expire in one hour
+              { expiresIn: 3600 },
+              (err, token) => {
+                res.json({
+                  success: true,
+                  token: 'Bearer ' + token
+                });
+              });
           } else {
             // And here:
-            errors.password = 'Incorrect password'
+            errors.password = 'Incorrect password';
             return res.status(400).json(errors);
           }
         });

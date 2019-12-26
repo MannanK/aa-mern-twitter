@@ -9,7 +9,7 @@ const port = process.env.PORT || 5000;
 
 const db = require('./config/keys').mongoURI;
 mongoose
-  .connect(db, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(db, { useNewUrlParser: true, useUnifiedTopology: true, family: 4 })
   .then(() => console.log("Connected to MongoDB successfully"))
   .catch(err => console.log(err));
 
